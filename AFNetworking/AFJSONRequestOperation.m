@@ -24,7 +24,9 @@
 
 #include <Availability.h>
 
+#if AFNETWORKING_USE_JSON_KIT
 #import "JSONKit.h"
+#endif
 
 static dispatch_queue_t af_json_request_operation_processing_queue;
 static dispatch_queue_t json_request_operation_processing_queue() {
@@ -122,10 +124,14 @@ static dispatch_queue_t json_request_operation_processing_queue() {
             if ([NSJSONSerialization class]) {
                 self.responseJSON = [NSJSONSerialization JSONObjectWithData:self.responseData options:0 error:&error];
             } else {
+#if AFNETWORKING_USE_JSON_KIT
                 self.responseJSON = [[JSONDecoder decoder] objectWithData:self.responseData error:&error];
+#endif
             }
 #else
+#if AFNETWORKING_USE_JSON_KIT
             self.responseJSON = [[JSONDecoder decoder] objectWithData:self.responseData error:&error];
+#endif
 #endif
         }
         

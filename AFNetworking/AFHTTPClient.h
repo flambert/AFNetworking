@@ -22,6 +22,10 @@
 
 #import <Foundation/Foundation.h>
 
+#ifndef AFNETWORKING_USE_JSON_KIT
+#define AFNETWORKING_USE_JSON_KIT 0
+#endif
+
 @class AFHTTPRequestOperation;
 @protocol AFHTTPClientOperation;
 @protocol AFMultipartFormData;

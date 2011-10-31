@@ -31,7 +31,9 @@
 #import <UIKit/UIKit.h>
 #endif
 
+#if AFNETWORKING_USE_JSON_KIT
 #import "JSONKit.h"
+#endif
 
 static NSString * const kAFMultipartFormLineDelimiter = @"\r\n"; // CRLF
 static NSString * const kAFMultipartFormBoundary = @"Boundary+0xAbCdEfGbOuNdArY";
@@ -118,10 +120,14 @@ static NSString * AFJSONStringFromParameters(NSDictionary *parameters) {
             JSONString = [[[NSString alloc] initWithData:JSONData encoding:NSUTF8StringEncoding] autorelease];
         }
     } else {
+#if AFNETWORKING_USE_JSON_KIT
         JSONString = [parameters JSONString];
+#endif
     }
 #else
+#if AFNETWORKING_USE_JSON_KIT
     JSONString = [parameters JSONString];
+#endif
 #endif
 
     return JSONString;
