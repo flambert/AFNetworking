@@ -84,12 +84,11 @@ static NSString * AFBase64EncodedStringFromString(NSString *string) {
 }
 
 static NSURL * AFURLWithPathRelativeToURL(NSString *path, NSURL *baseURL) {
-    // Mirego - "path" can be nil
-    NSURL *url = baseURL;
-    if (path != nil)
-        url = [url URLByAppendingPathComponent:[path stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"/"]]];
-    // Mirego - "path" can be nil
+    if (!path) {
+        return baseURL;
+    }
     
+    NSURL *url = [baseURL URLByAppendingPathComponent:[path stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"/"]]];
     NSString *URLString = [url absoluteString];
     if ([path hasSuffix:@"/"]) {
         URLString = [URLString stringByAppendingString:@"/"];
