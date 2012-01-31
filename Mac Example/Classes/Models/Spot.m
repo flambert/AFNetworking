@@ -26,7 +26,7 @@
 
 @implementation Spot
 @synthesize name = _name;
-@synthesize imageURLString = _imageURLString;
+@synthesize imageURL = _imageURL;
 @synthesize latitude = _latitude;
 @synthesize longitude = _longitude;
 @dynamic location;
@@ -38,7 +38,7 @@
     }
     
     self.name = [attributes valueForKeyPath:@"name"];
-    self.imageURLString = [attributes valueForKeyPath:@"image_url"];
+    self.imageURL = [NSURL URLWithString:[attributes valueForKeyPath:@"image_url"]];
     self.latitude = [attributes valueForKeyPath:@"lat"];
     self.longitude = [attributes valueForKeyPath:@"lng"];
     
@@ -56,17 +56,19 @@
 		[mutableParameters setValue:[NSString stringWithFormat:@"%1.7f", location.coordinate.longitude] forKey:@"lng"];
 	}
     
-    [[AFGowallaAPIClient sharedClient] getPath:urlString parameters:mutableParameters success:^(id object) {
+    [[AFGowallaAPIClient sharedClient] getPath:urlString parameters:mutableParameters success:^(__unused AFHTTPRequestOperation *operation, id JSON) {
         NSMutableArray *mutableRecords = [NSMutableArray array];
-        for (NSDictionary *attributes in [object valueForKeyPath:@"spots"]) {
-            Spot *spot = [[Spot alloc] initWithAttributes:attributes];
-            [mutableRecords addObject:spot];
+        for (NSDictionary *attributes in [JSON valueForKeyPath:@"spots"]) {
+            @autoreleasepool {
+                Spot *spot = [[Spot alloc] initWithAttributes:attributes];
+                [mutableRecords addObject:spot];
+            }
         }
         
         if (block) {
             block([NSArray arrayWithArray:mutableRecords]);
         }
-    } failure:^(NSHTTPURLResponse *response, NSError *error) {
+    } failure:^(__unused AFHTTPRequestOperation *operation, NSError *error) {
         if (block) {
             block([NSArray array]);
         }

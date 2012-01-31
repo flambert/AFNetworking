@@ -21,12 +21,7 @@
 // THE SOFTWARE.
 
 #import "AFJSONRequestOperation.h"
-
-#include <Availability.h>
-
-#if AFNETWORKING_USE_JSON_KIT
-#import "JSONKit.h"
-#endif
+#import "AFJSONUtilities.h"
 
 static dispatch_queue_t af_json_request_operation_processing_queue;
 static dispatch_queue_t json_request_operation_processing_queue() {
@@ -50,49 +45,33 @@ static dispatch_queue_t json_request_operation_processing_queue() {
 @synthesize JSONError = _JSONError;
 
 + (AFJSONRequestOperation *)JSONRequestOperationWithRequest:(NSURLRequest *)urlRequest
-                                                    success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, id JSON))success
-                                                    failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure
+                                                    success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, id JSON))success 
+                                                    failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error, id JSON))failure
 {
-    AFJSONRequestOperation *operation = [[[self alloc] initWithRequest:urlRequest] autorelease];
-    operation.completionBlock = ^ {
-        if ([operation isCancelled]) {
-            return;
+    AFJSONRequestOperation *requestOperation = [[[self alloc] initWithRequest:urlRequest] autorelease];
+    [requestOperation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation, id responseObject) {
+        if (success) {
+            success(operation.request, operation.response, responseObject);
         }
-        
-        if (operation.error) {
-            if (failure) {
-                dispatch_async(dispatch_get_main_queue(), ^(void) {
-                    failure(operation.request, operation.response, operation.error);
-                });
-            }
-        } else {
-            dispatch_async(json_request_operation_processing_queue(), ^(void) {
-                id JSON = operation.responseJSON;
-                
-                dispatch_async(dispatch_get_main_queue(), ^(void) {
-                    if (operation.error) {
-                        if (failure) {
-                            failure(operation.request, operation.response, operation.error);
-                        }
-                    } else {
-                        if (success) {
-                            success(operation.request, operation.response, JSON);
-                        }
-                    }
-                }); 
-            });
+    } failure:^(AFHTTPRequestOperation *operation, NSError *error) {
+        if (failure) {
+            failure(operation.request, operation.response, error, [(AFJSONRequestOperation *)operation responseJSON]);
         }
-    };
+    }];
     
-    return operation;
+    return requestOperation;
 }
 
 + (NSSet *)defaultAcceptableContentTypes {
-    return [NSSet setWithObjects:@"application/json", @"text/json", nil];
+    return [NSSet setWithObjects:@"application/json", @"text/json", @"text/javascript", nil];
 }
 
 + (NSSet *)defaultAcceptablePathExtensions {
     return [NSSet setWithObjects:@"json", nil];
+}
+
++ (BOOL)canProcessRequest:(NSURLRequest *)request {
+    return [[self defaultAcceptableContentTypes] containsObject:[request valueForHTTPHeaderField:@"Accept"]] || [[self defaultAcceptablePathExtensions] containsObject:[[request URL] pathExtension]];
 }
 
 - (id)initWithRequest:(NSURLRequest *)urlRequest {
@@ -113,26 +92,13 @@ static dispatch_queue_t json_request_operation_processing_queue() {
 }
 
 - (id)responseJSON {
-    if (!_responseJSON && [self isFinished]) {
+    if (!_responseJSON && [self.responseData length] > 0 && [self isFinished]) {
         NSError *error = nil;
 
         if ([self.responseData length] == 0) {
             self.responseJSON = nil;
         } else {
-
-#if __IPHONE_OS_VERSION_MIN_REQUIRED > __IPHONE_4_3 || __MAC_OS_X_VERSION_MIN_REQUIRED > __MAC_10_6
-            if ([NSJSONSerialization class]) {
-                self.responseJSON = [NSJSONSerialization JSONObjectWithData:self.responseData options:0 error:&error];
-            } else {
-#if AFNETWORKING_USE_JSON_KIT
-                self.responseJSON = [[JSONDecoder decoder] objectWithData:self.responseData error:&error];
-#endif
-            }
-#else
-#if AFNETWORKING_USE_JSON_KIT
-            self.responseJSON = [[JSONDecoder decoder] objectWithData:self.responseData error:&error];
-#endif
-#endif
+            self.responseJSON = AFJSONDecode(self.responseData, &error);
         }
         
         self.JSONError = error;
@@ -149,21 +115,38 @@ static dispatch_queue_t json_request_operation_processing_queue() {
     }
 }
 
-#pragma mark - AFHTTPClientOperation
-
-+ (BOOL)canProcessRequest:(NSURLRequest *)request {
-    return [[self defaultAcceptableContentTypes] containsObject:[request valueForHTTPHeaderField:@"Accept"]] || [[self defaultAcceptablePathExtensions] containsObject:[[request URL] pathExtension]];
-}
-
-+ (AFHTTPRequestOperation *)HTTPRequestOperationWithRequest:(NSURLRequest *)urlRequest
-                                                    success:(void (^)(id object))success 
-                                                    failure:(void (^)(NSHTTPURLResponse *response, NSError *error))failure
+- (void)setCompletionBlockWithSuccess:(void (^)(AFHTTPRequestOperation *operation, id responseObject))success
+                              failure:(void (^)(AFHTTPRequestOperation *operation, NSError *error))failure
 {
-    return [self JSONRequestOperationWithRequest:urlRequest success:^(NSURLRequest __unused *request, NSHTTPURLResponse __unused *response, id JSON) {
-        success(JSON);
-    } failure:^(NSURLRequest __unused *request, NSHTTPURLResponse *response, NSError *error) {
-        failure(response, error);
-    }];
+    self.completionBlock = ^ {
+        if ([self isCancelled]) {
+            return;
+        }
+        
+        if (self.error) {
+            if (failure) {
+                dispatch_async(dispatch_get_main_queue(), ^(void) {
+                    failure(self, self.error);
+                });
+            }
+        } else {
+            dispatch_async(json_request_operation_processing_queue(), ^(void) {
+                id JSON = self.responseJSON;
+                
+                dispatch_async(dispatch_get_main_queue(), ^(void) {
+                    if (self.JSONError) {
+                        if (failure) {
+                            failure(self, self.JSONError);
+                        }
+                    } else {
+                        if (success) {
+                            success(self, JSON);
+                        }
+                    }
+                }); 
+            });
+        }
+    };    
 }
 
 @end

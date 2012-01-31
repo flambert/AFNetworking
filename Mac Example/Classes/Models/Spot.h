@@ -26,13 +26,13 @@
 @interface Spot : NSObject {
 @private
     NSString *_name;
-    NSString *_imageURLString;
+    NSURL *_imageURL;
     NSNumber *_latitude;
     NSNumber *_longitude;
 }
 
 @property (strong) NSString *name;
-@property (strong) NSString *imageURLString;
+@property (strong) NSURL *imageURL;
 @property (strong) NSNumber *latitude;
 @property (strong) NSNumber *longitude;
 @property (readonly) CLLocation *location;
