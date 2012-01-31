@@ -35,6 +35,9 @@
 - (void)cacheImageData:(NSData *)imageData
                 forURL:(NSURL *)url
              cacheName:(NSString *)cacheName;
+
+static inline UIImage * resizeImageToFitSize(UIImage *image, CGSize fitSize);
+
 @end
 
 #pragma mark -
@@ -85,21 +88,40 @@ static char kAFImageRequestOperationObjectKey;
 #pragma mark -
 
 - (void)setImageWithURL:(NSURL *)url {
-    [self setImageWithURL:url placeholderImage:nil];
+    [self setImageWithURL:url placeholderImage:nil scaledToSize:CGSizeZero];
+}
+
+- (void)setImageWithURL:(NSURL *)url
+           scaledToSize:(CGSize)size {
+    [self setImageWithURL:url placeholderImage:nil scaledToSize:size];
+}
+
+- (void)setImageWithURL:(NSURL *)url 
+       placeholderImage:(UIImage *)placeholderImage {
+    [self setImageWithURL:url placeholderImage:placeholderImage scaledToSize:CGSizeZero];
 }
 
 - (void)setImageWithURL:(NSURL *)url 
        placeholderImage:(UIImage *)placeholderImage
+           scaledToSize:(CGSize)size
 {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:30.0];
     [request setHTTPShouldHandleCookies:NO];
     [request setHTTPShouldUsePipelining:YES];
     
-    [self setImageWithURLRequest:request placeholderImage:placeholderImage success:nil failure:nil];
+    [self setImageWithURLRequest:request placeholderImage:placeholderImage scaledToSize:size success:nil failure:nil];
 }
 
 - (void)setImageWithURLRequest:(NSURLRequest *)urlRequest 
               placeholderImage:(UIImage *)placeholderImage 
+                       success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image))success
+                       failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure {
+    [self setImageWithURLRequest:urlRequest placeholderImage:placeholderImage scaledToSize:CGSizeZero success:success failure:failure];
+}
+
+- (void)setImageWithURLRequest:(NSURLRequest *)urlRequest 
+              placeholderImage:(UIImage *)placeholderImage 
+                  scaledToSize:(CGSize)size 
                        success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image))success
                        failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure
 {
@@ -109,7 +131,11 @@ static char kAFImageRequestOperationObjectKey;
         [self cancelImageRequestOperation];
     }
     
-    UIImage *cachedImage = [[[self class] af_sharedImageCache] cachedImageForURL:[urlRequest URL] cacheName:nil];
+    NSString* cacheName = nil;
+    if (CGSizeEqualToSize(size, CGSizeZero) == NO)
+        cacheName = NSStringFromCGSize(size);
+    
+    UIImage *cachedImage = [[[self class] af_sharedImageCache] cachedImageForURL:[urlRequest URL] cacheName:cacheName];
     if (cachedImage) {
         self.image = cachedImage;
         self.af_imageRequestOperation = nil;
@@ -122,15 +148,37 @@ static char kAFImageRequestOperationObjectKey;
         
         AFImageRequestOperation *requestOperation = [[[AFImageRequestOperation alloc] initWithRequest:urlRequest] autorelease];
         [requestOperation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation, id responseObject) {
-            if ([[urlRequest URL] isEqual:[[self.af_imageRequestOperation request] URL]]) {
-                self.image = responseObject;
+            void(^successBlock)(id) = ^(id responseObject){
+                if ([[urlRequest URL] isEqual:[[self.af_imageRequestOperation request] URL]]) {
+                    self.image = responseObject;
+                }
+                
+                if (success) {
+                    success(operation.request, operation.response, responseObject);
+                }
+            };
+            
+            if (cacheName == nil) {
+                successBlock(responseObject);
+                [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forURL:[urlRequest URL] cacheName:nil];
+            } else {
+                dispatch_queue_t calling_queue = dispatch_get_current_queue();
+                dispatch_sync(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    UIImage* image = resizeImageToFitSize(responseObject, size);
+                    dispatch_async(calling_queue, ^{
+                        successBlock(image);
+                        [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forURL:[urlRequest URL] cacheName:nil];
+                        
+                        NSData* imageData;
+                        NSString* pathExtension = [[[[urlRequest URL] absoluteString] pathExtension] lowercaseString];
+                        if ([pathExtension isEqualToString:@"jpg"] || [pathExtension isEqualToString:@"jpeg"])
+                            imageData = UIImageJPEGRepresentation(image, 0.8);
+                        else
+                            imageData = UIImagePNGRepresentation(image);
+                        [[[self class] af_sharedImageCache] cacheImageData:imageData forURL:[urlRequest URL] cacheName:cacheName];
+                    });
+                });
             }
-
-            if (success) {
-                success(operation.request, operation.response, responseObject);
-            }
-
-            [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forURL:[urlRequest URL] cacheName:nil];
         } failure:^(AFHTTPRequestOperation *operation, NSError *error) {
             if (failure) {
                 failure(operation.request, operation.response, error);
@@ -187,5 +235,75 @@ static inline NSString * AFImageCacheKeyFromURLAndCacheName(NSURL *url, NSString
 }
 
 @end
+
+#pragma mark -
+
+static inline UIImage * resizeImageToFitSize(UIImage *image, CGSize fitSize)
+{
+	float imageScaleFactor = 1.0;
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 40000
+	if ([image respondsToSelector:@selector(scale)]) {
+		imageScaleFactor = [image scale];
+	}
+#endif
+    
+    float sourceWidth = [image size].width * imageScaleFactor;
+    float sourceHeight = [image size].height * imageScaleFactor;
+    float targetWidth = fitSize.width;
+    float targetHeight = fitSize.height;
+    
+    // Calculate aspect ratios
+    float sourceRatio = sourceWidth / sourceHeight;
+    float targetRatio = targetWidth / targetHeight;
+    
+    // Determine what side of the source image to use for proportional scaling
+    BOOL scaleWidth = !(sourceRatio <= targetRatio);
+    
+    // Proportionally scale source image
+    float scalingFactor, scaledWidth, scaledHeight;
+    if (scaleWidth) {
+        scalingFactor = 1.0 / sourceRatio;
+        scaledWidth = targetWidth;
+        scaledHeight = round(targetWidth * scalingFactor);
+    } else {
+        scalingFactor = sourceRatio;
+        scaledWidth = round(targetHeight * scalingFactor);
+        scaledHeight = targetHeight;
+    }
+    
+    // Calculate compositing rectangles
+    CGRect sourceRect = CGRectMake(0, 0, sourceWidth, sourceHeight);
+    CGRect destRect = CGRectMake(0, 0, scaledWidth, scaledHeight);
+    
+    // Create appropriately modified image.
+	UIImage *resizedImage = nil;
+#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 40000
+	if ([[[UIDevice currentDevice] systemVersion] floatValue] >= 4.0) {
+		UIGraphicsBeginImageContextWithOptions(destRect.size, NO, 0.0); // 0.0 for scale means "correct scale for device's main screen".
+		CGImageRef sourceImg = CGImageCreateWithImageInRect([image CGImage], sourceRect); // cropping happens here.
+		resizedImage = [UIImage imageWithCGImage:sourceImg scale:0.0 orientation:image.imageOrientation]; // create cropped UIImage.
+		[resizedImage drawInRect:destRect]; // the actual scaling happens here, and orientation is taken care of automatically.
+		CGImageRelease(sourceImg);
+		resizedImage = UIGraphicsGetImageFromCurrentImageContext();
+		UIGraphicsEndImageContext();
+	}
+#endif
+	if (!resizedImage) {
+		// Try older method.
+		CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+		CGContextRef context = CGBitmapContextCreate(NULL, fitSize.width, fitSize.height, 8, (fitSize.width * 4), 
+													 colorSpace, kCGImageAlphaPremultipliedLast);
+		CGImageRef sourceImg = CGImageCreateWithImageInRect([image CGImage], sourceRect);
+		CGContextDrawImage(context, destRect, sourceImg);
+		CGImageRelease(sourceImg);
+		CGImageRef finalImage = CGBitmapContextCreateImage(context);	
+		CGContextRelease(context);
+		CGColorSpaceRelease(colorSpace);
+		resizedImage = [UIImage imageWithCGImage:finalImage];
+		CGImageRelease(finalImage);
+	}
+    
+    return resizedImage;
+}
 
 #endif
