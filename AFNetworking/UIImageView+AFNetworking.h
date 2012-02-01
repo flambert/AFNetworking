@@ -42,8 +42,9 @@
  */
 - (void)setImageWithURL:(NSURL *)url;
 
-- (void)setImageWithURL:(NSURL *)url scaledToSize:(CGSize)size;
-
+- (void)setImageWithURL:(NSURL *)url
+        resizeCacheName:(NSString *)resizeCacheName
+                  block:(UIImage *(^)(UIImage* image))resizeBlock;
 
 /**
  Creates and enqueues an image request operation, which asynchronously downloads the image from the specified URL. If the image is cached locally, the image is set immediately. Otherwise, the specified placeholder image will be set immediately, and then the remote image will be set once the request is finished.
@@ -58,7 +59,8 @@
 
 - (void)setImageWithURL:(NSURL *)url 
        placeholderImage:(UIImage *)placeholderImage
-           scaledToSize:(CGSize)size;
+        resizeCacheName:(NSString *)resizeCacheName
+                  block:(UIImage *(^)(UIImage* image))resizeBlock;
 
 /**
  Creates and enqueues an image request operation, which asynchronously downloads the image with the specified url request object. If the image is cached locally, the image is set immediately. Otherwise, the specified placeholder image will be set immediately, and then the remote image will be set once the request is finished.
@@ -77,7 +79,8 @@
 
 - (void)setImageWithURLRequest:(NSURLRequest *)urlRequest 
               placeholderImage:(UIImage *)placeholderImage
-                  scaledToSize:(CGSize)size
+               resizeCacheName:(NSString *)resizeCacheName
+                         block:(UIImage *(^)(UIImage* image))resizeBlock
                        success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image))success
                        failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure;
 
