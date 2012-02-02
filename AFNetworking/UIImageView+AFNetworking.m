@@ -26,6 +26,15 @@
 #if __IPHONE_OS_VERSION_MIN_REQUIRED
 #import "UIImageView+AFNetworking.h"
 
+static dispatch_queue_t af_resize_image_operation_processing_queue;
+static dispatch_queue_t resize_image_operation_processing_queue() {
+    if (af_resize_image_operation_processing_queue == NULL) {
+        af_resize_image_operation_processing_queue = dispatch_queue_create("com.alamofire.networking.resize-image.processing", 0);
+    }
+    
+    return af_resize_image_operation_processing_queue;
+}
+
 @interface AFImageCache : NSCache
 @property (nonatomic, assign) CGFloat imageScale;
 
@@ -159,10 +168,10 @@ static char kAFImageRequestOperationObjectKey;
                 successBlock(responseObject);
                 [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forURL:[urlRequest URL] cacheName:nil];
             } else {
-                dispatch_queue_t calling_queue = dispatch_get_current_queue();
-                dispatch_sync(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0), ^{
+                dispatch_async(resize_image_operation_processing_queue(), ^{
                     UIImage* image = resizeBlock(responseObject);
-                    dispatch_async(calling_queue, ^{
+                    
+                    dispatch_async(dispatch_get_main_queue(), ^{
                         successBlock(image);
                         [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forURL:[urlRequest URL] cacheName:nil];
                         
