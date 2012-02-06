@@ -424,7 +424,7 @@ didReceiveResponse:(NSURLResponse *)response
 - (void)connectionDidFinishLoading:(NSURLConnection *)__unused connection {        
     if (self.outputStream) {
         [self.outputStream close];
-    } else {
+    } else if (self.dataAccumulator) {
         self.responseData = [NSData dataWithData:self.dataAccumulator];
         [_dataAccumulator release]; _dataAccumulator = nil;
     }
