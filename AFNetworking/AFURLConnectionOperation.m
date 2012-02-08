@@ -412,7 +412,7 @@ didReceiveResponse:(NSURLResponse *)response
             const uint8_t *dataBuffer = (uint8_t *) [data bytes];
             [self.outputStream write:&dataBuffer[0] maxLength:[data length]];
         }
-    } else {
+    } else if (data) {
         [self.dataAccumulator appendData:data];
     }
     
