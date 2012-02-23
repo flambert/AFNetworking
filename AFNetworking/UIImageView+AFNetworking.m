@@ -166,14 +166,13 @@ static char kAFImageRequestOperationObjectKey;
             
             if (resizeCacheName == nil && [responseObject isKindOfClass:[UIImage class]]) {
                 successBlock(responseObject);
-                [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forURL:[urlRequest URL] cacheName:nil];
+                [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forURL:[urlRequest URL] cacheName:resizeCacheName];
             } else {
                 dispatch_async(resize_image_operation_processing_queue(), ^{
                     UIImage* image = resizeBlock(responseObject);
                     
                     dispatch_async(dispatch_get_main_queue(), ^{
                         successBlock(image);
-                        [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forURL:[urlRequest URL] cacheName:nil];
                         
                         NSData* imageData;
                         NSString* pathExtension = [[[[urlRequest URL] absoluteString] pathExtension] lowercaseString];
