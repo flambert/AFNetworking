@@ -158,6 +158,8 @@ static char kAFImageRequestOperationObjectKey;
             
             if (styleCacheName == nil && [responseObject isKindOfClass:[UIImage class]]) {
                 successBlock(responseObject);
+                self.af_imageRequestOperation = nil;
+                
                 [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forRequest:urlRequest cacheName:styleCacheName];
             } else {
                 dispatch_async(style_image_operation_processing_queue(), ^{
@@ -165,19 +167,19 @@ static char kAFImageRequestOperationObjectKey;
                     
                     dispatch_async(dispatch_get_main_queue(), ^{
                         successBlock(image);
-                        
-                        NSData* imageData;
-                        NSString* pathExtension = [[[[urlRequest URL] absoluteString] pathExtension] lowercaseString];
-                        if ([pathExtension isEqualToString:@"jpg"] || [pathExtension isEqualToString:@"jpeg"])
-                            imageData = UIImageJPEGRepresentation(image, 0.8);
-                        else
-                            imageData = UIImagePNGRepresentation(image);
-                        [[[self class] af_sharedImageCache] cacheImageData:imageData forRequest:urlRequest cacheName:styleCacheName];
+                        self.af_imageRequestOperation = nil;
                     });
+                                   
+                    NSData* imageData;
+                    NSString* pathExtension = [[[[urlRequest URL] absoluteString] pathExtension] lowercaseString];
+                    if ([pathExtension isEqualToString:@"jpg"] || [pathExtension isEqualToString:@"jpeg"])
+                        imageData = UIImageJPEGRepresentation(image, 0.8);
+                    else
+                        imageData = UIImagePNGRepresentation(image);
+                    
+                    [[[self class] af_sharedImageCache] cacheImageData:imageData forRequest:urlRequest cacheName:styleCacheName];
                 });
             }
-            
-            self.af_imageRequestOperation = nil;
         } failure:^(AFHTTPRequestOperation *operation, NSError *error) {
             if (failure) {
                 failure(operation.request, operation.response, error);
