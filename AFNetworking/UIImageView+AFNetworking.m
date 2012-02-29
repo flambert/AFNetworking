@@ -26,25 +26,21 @@
 #if __IPHONE_OS_VERSION_MIN_REQUIRED
 #import "UIImageView+AFNetworking.h"
 
-static dispatch_queue_t af_resize_image_operation_processing_queue;
-static dispatch_queue_t resize_image_operation_processing_queue() {
-    if (af_resize_image_operation_processing_queue == NULL) {
-        af_resize_image_operation_processing_queue = dispatch_queue_create("com.alamofire.networking.resize-image.processing", 0);
+static dispatch_queue_t af_style_image_operation_processing_queue;
+static dispatch_queue_t style_image_operation_processing_queue() {
+    if (af_style_image_operation_processing_queue == NULL) {
+        af_style_image_operation_processing_queue = dispatch_queue_create("com.alamofire.networking.style-image.processing", 0);
     }
     
-    return af_resize_image_operation_processing_queue;
+    return af_style_image_operation_processing_queue;
 }
 
 @interface AFImageCache : NSCache
-@property (nonatomic, assign) CGFloat imageScale;
-
-- (UIImage *)cachedImageForURL:(NSURL *)url
-                     cacheName:(NSString *)cacheName;
-
+- (UIImage *)cachedImageForRequest:(NSURLRequest *)request
+                         cacheName:(NSString *)cacheName;
 - (void)cacheImageData:(NSData *)imageData
-                forURL:(NSURL *)url
+            forRequest:(NSURLRequest *)request
              cacheName:(NSString *)cacheName;
-
 @end
 
 #pragma mark -
@@ -95,53 +91,49 @@ static char kAFImageRequestOperationObjectKey;
 #pragma mark -
 
 - (void)setImageWithURL:(NSURL *)url {
-    [self setImageWithURL:url placeholderImage:nil resizeCacheName:nil block:nil];
+    [self setImageWithURL:url placeholderImage:nil styleCacheName:nil styleBlock:nil];
 }
 
 - (void)setImageWithURL:(NSURL *)url
-        resizeCacheName:(NSString *)resizeCacheName
-                  block:(UIImage *(^)(UIImage *))resizeBlock {
-    [self setImageWithURL:url placeholderImage:nil resizeCacheName:resizeCacheName block:resizeBlock];
+         styleCacheName:(NSString *)styleCacheName
+             styleBlock:(UIImage *(^)(UIImage *))styleBlock {
+    [self setImageWithURL:url placeholderImage:nil styleCacheName:styleCacheName styleBlock:styleBlock];
 }
 
 - (void)setImageWithURL:(NSURL *)url 
        placeholderImage:(UIImage *)placeholderImage {
-    [self setImageWithURL:url placeholderImage:placeholderImage resizeCacheName:nil block:nil];
+    [self setImageWithURL:url placeholderImage:placeholderImage styleCacheName:nil styleBlock:nil];
 }
 
 - (void)setImageWithURL:(NSURL *)url 
        placeholderImage:(UIImage *)placeholderImage
-        resizeCacheName:(NSString *)resizeCacheName
-                  block:(UIImage *(^)(UIImage *))resizeBlock
+         styleCacheName:(NSString *)styleCacheName
+             styleBlock:(UIImage *(^)(UIImage *))styleBlock
 {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:30.0];
     [request setHTTPShouldHandleCookies:NO];
     [request setHTTPShouldUsePipelining:YES];
     
-    [self setImageWithURLRequest:request placeholderImage:placeholderImage resizeCacheName:resizeCacheName block:resizeBlock success:nil failure:nil];
+    [self setImageWithURLRequest:request placeholderImage:placeholderImage styleCacheName:styleCacheName styleBlock:styleBlock success:nil failure:nil];
 }
 
 - (void)setImageWithURLRequest:(NSURLRequest *)urlRequest 
               placeholderImage:(UIImage *)placeholderImage 
                        success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image))success
                        failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure {
-    [self setImageWithURLRequest:urlRequest placeholderImage:placeholderImage resizeCacheName:nil block:nil success:success failure:failure];
+    [self setImageWithURLRequest:urlRequest placeholderImage:placeholderImage styleCacheName:nil styleBlock:nil success:success failure:failure];
 }
 
 - (void)setImageWithURLRequest:(NSURLRequest *)urlRequest 
               placeholderImage:(UIImage *)placeholderImage 
-               resizeCacheName:(NSString *)resizeCacheName
-                         block:(UIImage *(^)(UIImage *))resizeBlock
+                styleCacheName:(NSString *)styleCacheName
+                    styleBlock:(UIImage *(^)(UIImage *))styleBlock
                        success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image))success
                        failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure
 {
-    if (![urlRequest URL] || (![self.af_imageRequestOperation isCancelled] && [[urlRequest URL] isEqual:[[self.af_imageRequestOperation request] URL]])) {
-        return;
-    } else {
-        [self cancelImageRequestOperation];
-    }
+    [self cancelImageRequestOperation];
     
-    UIImage *cachedImage = [[[self class] af_sharedImageCache] cachedImageForURL:[urlRequest URL] cacheName:resizeCacheName];
+    UIImage *cachedImage = [[[self class] af_sharedImageCache] cachedImageForRequest:urlRequest cacheName:styleCacheName];
     if (cachedImage) {
         self.image = cachedImage;
         self.af_imageRequestOperation = nil;
@@ -164,12 +156,12 @@ static char kAFImageRequestOperationObjectKey;
                 }
             };
             
-            if (resizeCacheName == nil && [responseObject isKindOfClass:[UIImage class]]) {
+            if (styleCacheName == nil && [responseObject isKindOfClass:[UIImage class]]) {
                 successBlock(responseObject);
-                [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forURL:[urlRequest URL] cacheName:resizeCacheName];
+                [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forRequest:urlRequest cacheName:styleCacheName];
             } else {
-                dispatch_async(resize_image_operation_processing_queue(), ^{
-                    UIImage* image = resizeBlock(responseObject);
+                dispatch_async(style_image_operation_processing_queue(), ^{
+                    UIImage* image = styleBlock(responseObject);
                     
                     dispatch_async(dispatch_get_main_queue(), ^{
                         successBlock(image);
@@ -180,14 +172,18 @@ static char kAFImageRequestOperationObjectKey;
                             imageData = UIImageJPEGRepresentation(image, 0.8);
                         else
                             imageData = UIImagePNGRepresentation(image);
-                        [[[self class] af_sharedImageCache] cacheImageData:imageData forURL:[urlRequest URL] cacheName:resizeCacheName];
+                        [[[self class] af_sharedImageCache] cacheImageData:imageData forRequest:urlRequest cacheName:styleCacheName];
                     });
                 });
             }
+            
+            self.af_imageRequestOperation = nil;
         } failure:^(AFHTTPRequestOperation *operation, NSError *error) {
             if (failure) {
                 failure(operation.request, operation.response, error);
             }
+            
+            self.af_imageRequestOperation = nil;
         }];
         
         self.af_imageRequestOperation = requestOperation;
@@ -198,45 +194,41 @@ static char kAFImageRequestOperationObjectKey;
 
 - (void)cancelImageRequestOperation {
     [self.af_imageRequestOperation cancel];
+    self.af_imageRequestOperation = nil;
 }
 
 @end
 
 #pragma mark -
 
-static inline NSString * AFImageCacheKeyFromURLAndCacheName(NSURL *url, NSString *cacheName) {
-    return [[url absoluteString] stringByAppendingFormat:@"#%@", cacheName];
+static inline NSString * AFImageCacheKeyFromURLRequest(NSURLRequest *request, NSString *cacheName) {
+    return [[[request URL] absoluteString] stringByAppendingFormat:@"#%@", cacheName];
 }
 
 @implementation AFImageCache
-@synthesize imageScale = _imageScale;
 
-- (id)init {
-	self = [super init];
-	if (!self) {
-		return nil;
+- (UIImage *)cachedImageForRequest:(NSURLRequest *)request cacheName:(NSString *)cacheName {
+    switch ([request cachePolicy]) {
+        case NSURLRequestReloadIgnoringCacheData:
+        case NSURLRequestReloadIgnoringLocalAndRemoteCacheData:
+            return nil;
+        default:
+            break;
+    }
+    
+	UIImage *image = [UIImage imageWithData:[self objectForKey:AFImageCacheKeyFromURLRequest(request, cacheName)]];
+	if (image) {
+		return [UIImage imageWithCGImage:[image CGImage] scale:[[UIScreen mainScreen] scale] orientation:image.imageOrientation];
 	}
     
-    self.imageScale = [[UIScreen mainScreen] scale];
-	
-	return self;
-}
-
-- (UIImage *)cachedImageForURL:(NSURL *)url
-                     cacheName:(NSString *)cacheName
-{
-	UIImage *image = [UIImage imageWithData:[self objectForKey:AFImageCacheKeyFromURLAndCacheName(url, cacheName)]];
-	if (image) {
-		return [UIImage imageWithCGImage:[image CGImage] scale:self.imageScale orientation:image.imageOrientation];
-	}
     return image;
 }
 
 - (void)cacheImageData:(NSData *)imageData
-                forURL:(NSURL *)url
+            forRequest:(NSURLRequest *)request
              cacheName:(NSString *)cacheName
 {
-    [self setObject:[NSPurgeableData dataWithData:imageData] forKey:AFImageCacheKeyFromURLAndCacheName(url, cacheName)];
+    [self setObject:[NSPurgeableData dataWithData:imageData] forKey:AFImageCacheKeyFromURLRequest(request, cacheName)];
 }
 
 @end
