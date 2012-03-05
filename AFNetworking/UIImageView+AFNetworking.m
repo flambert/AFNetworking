@@ -147,7 +147,7 @@ static char kAFImageRequestOperationObjectKey;
         AFImageRequestOperation *requestOperation = [[[AFImageRequestOperation alloc] initWithRequest:urlRequest] autorelease];
         [requestOperation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation, id responseObject) {
             void(^successBlock)(id) = ^(id responseObject){
-                if ([[urlRequest URL] isEqual:[[self.af_imageRequestOperation request] URL]]) {
+                if ([[urlRequest URL] isEqual:[[self.af_imageRequestOperation request] URL]] && ![self.af_imageRequestOperation isCancelled]) {
                     self.image = responseObject;
                 }
                 
