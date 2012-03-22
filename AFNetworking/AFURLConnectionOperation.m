@@ -43,6 +43,7 @@ NSString * const AFNetworkingOperationDidFinishNotification = @"com.alamofire.ne
 typedef void (^AFURLConnectionOperationProgressBlock)(NSInteger bytes, NSInteger totalBytes, NSInteger totalBytesExpected);
 typedef BOOL (^AFURLConnectionOperationAuthenticationAgainstProtectionSpaceBlock)(NSURLConnection *connection, NSURLProtectionSpace *protectionSpace);
 typedef void (^AFURLConnectionOperationAuthenticationChallengeBlock)(NSURLConnection *connection, NSURLAuthenticationChallenge *challenge);
+typedef NSCachedURLResponse * (^AFURLConnectionOperationCacheResponseBlock)(NSURLConnection *connection, NSCachedURLResponse *cachedResponse);
 
 static inline NSString * AFKeyPathFromOperationState(AFOperationState state) {
     switch (state) {
@@ -97,6 +98,7 @@ static inline BOOL AFStateTransitionIsValid(AFOperationState fromState, AFOperat
 @property (readwrite, nonatomic, copy) AFURLConnectionOperationProgressBlock downloadProgress;
 @property (readwrite, nonatomic, copy) AFURLConnectionOperationAuthenticationAgainstProtectionSpaceBlock authenticationAgainstProtectionSpace;
 @property (readwrite, nonatomic, copy) AFURLConnectionOperationAuthenticationChallengeBlock authenticationChallenge;
+@property (readwrite, nonatomic, copy) AFURLConnectionOperationCacheResponseBlock cacheResponse;
 
 - (void)operationDidStart;
 - (void)finish;
@@ -119,6 +121,7 @@ static inline BOOL AFStateTransitionIsValid(AFOperationState fromState, AFOperat
 @synthesize downloadProgress = _downloadProgress;
 @synthesize authenticationAgainstProtectionSpace = _authenticationAgainstProtectionSpace;
 @synthesize authenticationChallenge = _authenticationChallenge;
+@synthesize cacheResponse = _cacheResponse;
 @synthesize lock = _lock;
 
 + (void)networkRequestThreadEntryPoint:(id)__unused object {
@@ -191,6 +194,7 @@ static inline BOOL AFStateTransitionIsValid(AFOperationState fromState, AFOperat
     [_downloadProgress release];
     [_authenticationChallenge release];
     [_authenticationAgainstProtectionSpace release];
+    [_cacheResponse release];
     
     [_connection release];
     
@@ -239,6 +243,10 @@ static inline BOOL AFStateTransitionIsValid(AFOperationState fromState, AFOperat
 
 - (void)setAuthenticationChallengeBlock:(void (^)(NSURLConnection *connection, NSURLAuthenticationChallenge *challenge))block {
     self.authenticationChallenge = block;
+}
+
+- (void)setCacheResponseBlock:(NSCachedURLResponse * (^)(NSURLConnection *connection, NSCachedURLResponse *cachedResponse))block {
+    self.cacheResponse = block;
 }
 
 - (void)setState:(AFOperationState)state {
@@ -373,6 +381,7 @@ canAuthenticateAgainstProtectionSpace:(NSURLProtectionSpace *)protectionSpace
         return YES;
     }
 #endif
+    
     if (self.authenticationAgainstProtectionSpace) {
         return self.authenticationAgainstProtectionSpace(connection, protectionSpace);
     } else if ([protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust] || [protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodClientCertificate]) {
@@ -385,15 +394,16 @@ canAuthenticateAgainstProtectionSpace:(NSURLProtectionSpace *)protectionSpace
 - (void)connection:(NSURLConnection *)connection 
 didReceiveAuthenticationChallenge:(NSURLAuthenticationChallenge *)challenge 
 {
+#ifdef _AFNETWORKING_ALLOW_INVALID_SSL_CERTIFICATES_
+    if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust]) {
+        [challenge.sender useCredential:[NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust] forAuthenticationChallenge:challenge];
+        return;
+    }
+#endif
+    
     if (self.authenticationChallenge) {
         self.authenticationChallenge(connection, challenge);
     } else {
-#ifdef _AFNETWORKING_ALLOW_INVALID_SSL_CERTIFICATES_
-        if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust]) {
-            [challenge.sender useCredential:[NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust] forAuthenticationChallenge:challenge];
-            return;
-        }
-#endif        
         if ([challenge previousFailureCount] == 0) {
             NSURLCredential *credential = nil;
             
@@ -491,14 +501,18 @@ didReceiveResponse:(NSURLResponse *)response
     self.connection = nil;
 }
 
-- (NSCachedURLResponse *)connection:(NSURLConnection *)__unused connection 
+- (NSCachedURLResponse *)connection:(NSURLConnection *)connection 
                   willCacheResponse:(NSCachedURLResponse *)cachedResponse 
 {
-    if ([self isCancelled]) {
-        return nil;
+    if (self.cacheResponse) {
+        return self.cacheResponse(connection, cachedResponse);
+    } else {
+        if ([self isCancelled]) {
+            return nil;
+        }
+        
+        return cachedResponse; 
     }
-    
-    return cachedResponse;
 }
 
 @end

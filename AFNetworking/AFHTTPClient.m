@@ -96,10 +96,10 @@ static NSString * AFBase64EncodedStringFromString(NSString *string) {
 }
 
 NSString * AFURLEncodedStringFromStringWithEncoding(NSString *string, NSStringEncoding encoding) {
-    static NSString * const kAFLegalCharactersToBeEscaped = @"?!@#$^&%*+,:;='\"`<>()[]{}/\\|~ ";
+    static NSString * const kAFLegalCharactersToBeEscaped = @"?!@#$^&%*+=,:;'\"`<>()[]{}/\\|~ ";
     
     /* 
-     The documentation for `CFURLCreateStringByAddingPercentEscapes` suggests that one should "pre-process" URL strings with unpredictable sequences that may already contain percent escapes.       However, if the string contains an unescaped sequence with '%' appearing without an escape code (such as when representing percentages like "42%"), `stringByReplacingPercentEscapesUsingEncoding` will return `nil`. Thus, the string is only unescaped if there are no invalid percent-escaped sequences. 
+     The documentation for `CFURLCreateStringByAddingPercentEscapes` suggests that one should "pre-process" URL strings with unpredictable sequences that may already contain percent escapes. However, if the string contains an unescaped sequence with '%' appearing without an escape code (such as when representing percentages like "42%"), `stringByReplacingPercentEscapesUsingEncoding` will return `nil`. Thus, the string is only unescaped if there are no invalid percent-escaped sequences. 
     */
     NSString *unescapedString = [string stringByReplacingPercentEscapesUsingEncoding:encoding];
     if (unescapedString) {
@@ -109,28 +109,101 @@ NSString * AFURLEncodedStringFromStringWithEncoding(NSString *string, NSStringEn
 	return [(NSString *)CFURLCreateStringByAddingPercentEscapes(kCFAllocatorDefault, (CFStringRef)string, NULL, (CFStringRef)kAFLegalCharactersToBeEscaped, CFStringConvertNSStringEncodingToEncoding(encoding)) autorelease];
 }
 
-NSString * AFQueryStringFromParametersWithEncoding(NSDictionary *parameters, NSStringEncoding encoding) {
-    NSMutableArray *mutableParameterComponents = [NSMutableArray array];
-    for (id key in [parameters allKeys]) {
-        id value = [parameters valueForKey:key];
-        if ([value isKindOfClass:[NSArray class]]) {
-            NSString *arrayKey = AFURLEncodedStringFromStringWithEncoding([NSString stringWithFormat:@"%@[]", [key description]], encoding);
-            for (id arrayValue in value) {
-                NSString *component = [NSString stringWithFormat:@"%@=%@", arrayKey, AFURLEncodedStringFromStringWithEncoding([arrayValue description], encoding)];
-                [mutableParameterComponents addObject:component];
-            }
-        } else {
-            NSString *component = [NSString stringWithFormat:@"%@=%@", AFURLEncodedStringFromStringWithEncoding([key description], encoding), AFURLEncodedStringFromStringWithEncoding([value description], encoding)];
-            [mutableParameterComponents addObject:component];
-        }
-    }    
+#pragma mark -
+
+@interface AFQueryStringComponent : NSObject {
+@private
+    NSString *_key;
+    NSString *_value;
+}
+
+@property (readwrite, nonatomic, retain) id key;
+@property (readwrite, nonatomic, retain) id value;
+
+- (id)initWithKey:(NSString *)key value:(NSString *)value; 
+
+@end
+
+@implementation AFQueryStringComponent 
+@synthesize key = _key;
+@synthesize value = _value;
+
+- (id)initWithKey:(NSString *)key value:(NSString *)value {
+    self = [super init];
+    if (!self) {
+        return nil;
+    }
     
-    return [mutableParameterComponents componentsJoinedByString:@"&"];
+    self.key = key;
+    self.value = value;
+    
+    return self;
+}
+
+- (void)dealloc {
+    [_key release];
+    [_value release];
+    [super dealloc];
+}
+
+- (NSString *)description {
+    return [NSString stringWithFormat:@"%@=%@", self.key, self.value];
+}
+
+@end
+
+#pragma mark -
+
+extern NSArray * AFQueryStringComponentsFromKeyAndValueWithEncoding(NSString *key, id value, NSStringEncoding stringEncoding);
+extern NSArray * AFQueryStringComponentsFromKeyAndDictionaryValueWithEncoding(NSString *key, NSDictionary *value, NSStringEncoding stringEncoding);
+extern NSArray * AFQueryStringComponentsFromKeyAndArrayValueWithEncoding(NSString *key, NSArray *value, NSStringEncoding stringEncoding);
+
+NSString * AFQueryStringFromParametersWithEncoding(NSDictionary *parameters, NSStringEncoding stringEncoding) {    
+    return [[AFQueryStringComponentsFromKeyAndValueWithEncoding(nil, parameters, stringEncoding) valueForKeyPath:@"description"] componentsJoinedByString:@"&"];
+}
+
+AFQueryStringComponent * AFQueryStringComponentFromKeyAndValueWithEncoding(id key, id value, NSStringEncoding stringEncoding) {
+    return [[[AFQueryStringComponent alloc] initWithKey:AFURLEncodedStringFromStringWithEncoding([key description], stringEncoding) value:AFURLEncodedStringFromStringWithEncoding([value description], stringEncoding)] autorelease];
+}
+
+NSArray * AFQueryStringComponentsFromKeyAndValueWithEncoding(NSString *key, id value,  NSStringEncoding stringEncoding) {
+    NSMutableArray *mutableQueryStringComponents = [NSMutableArray array];
+    
+    if([value isKindOfClass:[NSDictionary class]]) {
+        [mutableQueryStringComponents addObjectsFromArray:AFQueryStringComponentsFromKeyAndDictionaryValueWithEncoding(key, value, stringEncoding)];
+    } else if([value isKindOfClass:[NSArray class]]) {
+        [mutableQueryStringComponents addObjectsFromArray:AFQueryStringComponentsFromKeyAndArrayValueWithEncoding(key, value, stringEncoding)];
+    } else {
+        [mutableQueryStringComponents addObject:AFQueryStringComponentFromKeyAndValueWithEncoding(key, value, stringEncoding)];
+    } 
+    
+    return mutableQueryStringComponents;
+}
+
+NSArray * AFQueryStringComponentsFromKeyAndDictionaryValueWithEncoding(NSString *key, NSDictionary *value, NSStringEncoding stringEncoding){
+    NSMutableArray *mutableQueryStringComponents = [NSMutableArray array];
+    
+    [value enumerateKeysAndObjectsUsingBlock:^(id k, id v, BOOL *stop) {
+        [mutableQueryStringComponents addObjectsFromArray:AFQueryStringComponentsFromKeyAndValueWithEncoding((key ? [NSString stringWithFormat:@"%@[%@]", key, k] : k), v, stringEncoding)];
+    }];
+    
+    return mutableQueryStringComponents;
+}
+
+NSArray * AFQueryStringComponentsFromKeyAndArrayValueWithEncoding(NSString *key, NSArray *value, NSStringEncoding stringEncoding) {
+    NSMutableArray *mutableQueryStringComponents = [NSMutableArray array];
+    
+    [value enumerateObjectsUsingBlock:^(id v, NSUInteger idx, BOOL *stop) {
+        [mutableQueryStringComponents addObjectsFromArray:AFQueryStringComponentsFromKeyAndValueWithEncoding([NSString stringWithFormat:@"%@[]", key], v, stringEncoding)];
+    }];
+    
+    return mutableQueryStringComponents;
 }
 
 static NSString * AFJSONStringFromParameters(NSDictionary *parameters) {
     NSError *error = nil;
     NSData *JSONData = AFJSONEncode(parameters, &error);
+    
     if (!error) {
         return [[[NSString alloc] initWithData:JSONData encoding:NSUTF8StringEncoding] autorelease];
     } else {
@@ -359,21 +432,10 @@ static void AFReachabilityCallback(SCNetworkReachabilityRef __unused target, SCN
     NSMutableURLRequest *request = [self requestWithMethod:method path:path parameters:nil];
     __block AFMultipartFormData *formData = [[AFMultipartFormData alloc] initWithStringEncoding:self.stringEncoding];
     
-    id key = nil;
-	NSEnumerator *enumerator = [parameters keyEnumerator];
-	while ((key = [enumerator nextObject])) {
-        id value = [parameters valueForKey:key];
-        NSData *data = nil;
-        
-        if ([value isKindOfClass:[NSData class]]) {
-            data = value;
-        } else {
-            data = [[value description] dataUsingEncoding:self.stringEncoding];
-        }
-        
-        [formData appendPartWithFormData:data name:[key description]];
+    for (AFQueryStringComponent *component in AFQueryStringComponentsFromKeyAndValueWithEncoding(nil, parameters, self.stringEncoding)) {
+        [formData appendPartWithFormData:[component.value dataUsingEncoding:self.stringEncoding] name:component.key];
     }
-    
+
     if (block) {
         block(formData);
     }
