@@ -137,7 +137,7 @@ static char kAFImageRequestOperationObjectKey;
     if (cachedImage) {
         self.image = cachedImage;
         self.af_imageRequestOperation = nil;
-        
+
         if (success) {
             success(nil, nil, cachedImage);
         }
@@ -147,7 +147,7 @@ static char kAFImageRequestOperationObjectKey;
         AFImageRequestOperation *requestOperation = [[[AFImageRequestOperation alloc] initWithRequest:urlRequest] autorelease];
         [requestOperation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation, id responseObject) {
             void(^successBlock)(id) = ^(id responseObject){
-                if ([[urlRequest URL] isEqual:[[self.af_imageRequestOperation request] URL]] && ![self.af_imageRequestOperation isCancelled]) {
+                if ([[urlRequest URL] isEqual:[[self.af_imageRequestOperation request] URL]]) {
                     self.image = responseObject;
                 }
                 
@@ -162,14 +162,15 @@ static char kAFImageRequestOperationObjectKey;
                 
                 [[[self class] af_sharedImageCache] cacheImageData:operation.responseData forRequest:urlRequest cacheName:styleCacheName];
             } else {
+                dispatch_queue_t calling_queue = dispatch_get_current_queue();
                 dispatch_async(style_image_operation_processing_queue(), ^{
                     UIImage* image = styleBlock(responseObject);
                     
-                    dispatch_async(dispatch_get_main_queue(), ^{
+                    dispatch_async(calling_queue, ^{
                         successBlock(image);
                         self.af_imageRequestOperation = nil;
                     });
-                                   
+                    
                     NSData* imageData;
                     NSString* pathExtension = [[[[urlRequest URL] absoluteString] pathExtension] lowercaseString];
                     if ([pathExtension isEqualToString:@"jpg"] || [pathExtension isEqualToString:@"jpeg"])
