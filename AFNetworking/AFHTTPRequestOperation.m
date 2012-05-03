@@ -1,4 +1,4 @@
-// AFHTTPOperation.m
+// AFHTTPRequestOperation.m
 //
 // Copyright (c) 2011 Gowalla (http://gowalla.com/)
 // 
@@ -29,7 +29,7 @@ NSSet * AFContentTypesFromHTTPHeader(NSString *string) {
     static NSCharacterSet *_skippedCharacterSet = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        _skippedCharacterSet = [NSCharacterSet characterSetWithCharactersInString:@" ,"];
+        _skippedCharacterSet = [[NSCharacterSet characterSetWithCharactersInString:@" ,"] retain];
     });
     
     if (!string) {
@@ -54,10 +54,11 @@ NSSet * AFContentTypesFromHTTPHeader(NSString *string) {
     return [NSSet setWithSet:mutableContentTypes];
 }
 
-static void AFSwizzleClassMethodWithClassAndSelectorUsingBlock(Class klass, SEL selector, void *block) {
+static void AFSwizzleClassMethodWithImplementation(Class klass, SEL selector, IMP implementation) {
     Method originalMethod = class_getClassMethod(klass, selector);
-    IMP implementation = imp_implementationWithBlock(block);
-    class_replaceMethod(objc_getMetaClass([NSStringFromClass(klass) UTF8String]), selector, implementation, method_getTypeEncoding(originalMethod));
+	if (method_getImplementation(originalMethod) != implementation) {
+		class_replaceMethod(objc_getMetaClass([NSStringFromClass(klass) UTF8String]), selector, implementation, method_getTypeEncoding(originalMethod));
+    }
 }
 
 static NSString * AFStringFromIndexSet(NSIndexSet *indexSet) {
@@ -261,6 +262,10 @@ NSString * AFCreateIncompleteDownloadDirectoryPath(void) {
 
 #pragma mark - AFHTTPRequestOperation
 
+static id AFStaticClassValueImplementation(id self, SEL _cmd) {
+	return objc_getAssociatedObject([self class], _cmd);
+}
+
 + (NSIndexSet *)acceptableStatusCodes {
     return [NSIndexSet indexSetWithIndexesInRange:NSMakeRange(200, 100)];
 }
@@ -268,9 +273,9 @@ NSString * AFCreateIncompleteDownloadDirectoryPath(void) {
 + (void)addAcceptableStatusCodes:(NSIndexSet *)statusCodes {
     NSMutableIndexSet *mutableStatusCodes = [[[NSMutableIndexSet alloc] initWithIndexSet:[self acceptableStatusCodes]] autorelease];
     [mutableStatusCodes addIndexes:statusCodes];
-    AFSwizzleClassMethodWithClassAndSelectorUsingBlock([self class], @selector(acceptableStatusCodes), ^(id _self) {
-        return mutableStatusCodes;
-    });
+	SEL selector = @selector(acceptableStatusCodes);
+	AFSwizzleClassMethodWithImplementation([self class], selector, (IMP)AFStaticClassValueImplementation);
+	objc_setAssociatedObject([self class], selector, mutableStatusCodes, OBJC_ASSOCIATION_COPY_NONATOMIC);
 }
 
 + (NSSet *)acceptableContentTypes {
@@ -280,9 +285,9 @@ NSString * AFCreateIncompleteDownloadDirectoryPath(void) {
 + (void)addAcceptableContentTypes:(NSSet *)contentTypes {
     NSMutableSet *mutableContentTypes = [[[NSMutableSet alloc] initWithSet:[self acceptableContentTypes] copyItems:YES] autorelease];
     [mutableContentTypes unionSet:contentTypes];
-    AFSwizzleClassMethodWithClassAndSelectorUsingBlock([self class], @selector(acceptableContentTypes), ^(id _self) {
-        return mutableContentTypes;
-    });
+	SEL selector = @selector(acceptableContentTypes);
+	AFSwizzleClassMethodWithImplementation([self class], selector, (IMP)AFStaticClassValueImplementation);
+	objc_setAssociatedObject([self class], selector, mutableContentTypes, OBJC_ASSOCIATION_COPY_NONATOMIC);
 }
 
 + (BOOL)canProcessRequest:(NSURLRequest *)request {
