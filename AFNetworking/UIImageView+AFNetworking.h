@@ -42,10 +42,6 @@
  */
 - (void)setImageWithURL:(NSURL *)url;
 
-- (void)setImageWithURL:(NSURL *)url
-   imageProcessingBlock:(UIImage *(^)(UIImage *image))imageProcessingBlock
-              cacheName:(NSString *)cacheNameOrNil;
-
 /**
  Creates and enqueues an image request operation, which asynchronously downloads the image from the specified URL. If the image is cached locally, the image is set immediately. Otherwise, the specified placeholder image will be set immediately, and then the remote image will be set once the request is finished.
  
@@ -53,14 +49,9 @@
  @param placeholderImage The image to be set initially, until the image request finishes. If `nil`, the image view will not change its image until the image request finishes.
  
  @discussion By default, url requests have a cache policy of `NSURLCacheStorageAllowed` and a timeout interval of 30 seconds, and are set to use HTTP pipelining, and not handle cookies. To configure url requests differently, use `setImageWithURLRequest:placeholderImage:success:failure:`
- */
+*/
 - (void)setImageWithURL:(NSURL *)url 
        placeholderImage:(UIImage *)placeholderImage;
-
-- (void)setImageWithURL:(NSURL *)url 
-       placeholderImage:(UIImage *)placeholderImage
-   imageProcessingBlock:(UIImage *(^)(UIImage *image))imageProcessingBlock
-              cacheName:(NSString *)cacheNameOrNil;
 
 /**
  Creates and enqueues an image request operation, which asynchronously downloads the image with the specified url request object. If the image is cached locally, the image is set immediately. Otherwise, the specified placeholder image will be set immediately, and then the remote image will be set once the request is finished.
@@ -74,13 +65,6 @@
 */
 - (void)setImageWithURLRequest:(NSURLRequest *)urlRequest 
               placeholderImage:(UIImage *)placeholderImage 
-                       success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image))success
-                       failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure;
-
-- (void)setImageWithURLRequest:(NSURLRequest *)urlRequest 
-              placeholderImage:(UIImage *)placeholderImage
-          imageProcessingBlock:(UIImage *(^)(UIImage *image))imageProcessingBlock
-                     cacheName:(NSString *)cacheNameOrNil
                        success:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image))success
                        failure:(void (^)(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error))failure;
 

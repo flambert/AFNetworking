@@ -164,7 +164,6 @@ extern NSArray * AFQueryStringComponentsFromKeyAndValue(NSString *key, id value)
 extern NSArray * AFQueryStringComponentsFromKeyAndDictionaryValue(NSString *key, NSDictionary *value);
 extern NSArray * AFQueryStringComponentsFromKeyAndArrayValue(NSString *key, NSArray *value);
 
-NSString * AFQueryStringFromParametersWithEncoding(NSDictionary *parameters, NSStringEncoding stringEncoding);
 NSString * AFQueryStringFromParametersWithEncoding(NSDictionary *parameters, NSStringEncoding stringEncoding) {
     NSMutableArray *mutableComponents = [NSMutableArray array];
     for (AFQueryStringComponent *component in AFQueryStringComponentsFromKeyAndValue(nil, parameters)) {
