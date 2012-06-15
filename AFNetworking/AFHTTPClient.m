@@ -740,6 +740,13 @@ static inline NSString * AFMultipartFormFinalBoundary() {
 }
 
 - (NSMutableURLRequest *)requestByFinalizingMultipartFormData {
+    // Close the stream and return the original request if no data has been written
+    if ([[self.outputStream propertyForKey:NSStreamFileCurrentOffsetKey] integerValue] == 0) {
+        [self.outputStream close];
+        
+        return self.request;
+    }
+
     [self appendData:[AFMultipartFormFinalBoundary() dataUsingEncoding:self.stringEncoding]];
     
     [self.request setValue:[NSString stringWithFormat:@"multipart/form-data; boundary=%@", kAFMultipartFormBoundary] forHTTPHeaderField:@"Content-Type"];
@@ -761,7 +768,9 @@ static inline NSString * AFMultipartFormFinalBoundary() {
     }
 }
 
-- (void)appendPartWithHeaders:(NSDictionary *)headers body:(NSData *)body {
+- (void)appendPartWithHeaders:(NSDictionary *)headers 
+                         body:(NSData *)body 
+{
     [self appendBoundary];
     
     for (NSString *field in [headers allKeys]) {
@@ -772,14 +781,20 @@ static inline NSString * AFMultipartFormFinalBoundary() {
     [self appendData:body];
 }
 
-- (void)appendPartWithFormData:(NSData *)data name:(NSString *)name {
+- (void)appendPartWithFormData:(NSData *)data 
+                          name:(NSString *)name 
+{
     NSMutableDictionary *mutableHeaders = [NSMutableDictionary dictionary];
     [mutableHeaders setValue:[NSString stringWithFormat:@"form-data; name=\"%@\"", name] forKey:@"Content-Disposition"];
     
     [self appendPartWithHeaders:mutableHeaders body:data];
 }
 
-- (void)appendPartWithFileData:(NSData *)data name:(NSString *)name fileName:(NSString *)fileName mimeType:(NSString *)mimeType {    
+- (void)appendPartWithFileData:(NSData *)data 
+                          name:(NSString *)name 
+                      fileName:(NSString *)fileName 
+                      mimeType:(NSString *)mimeType
+{    
     NSMutableDictionary *mutableHeaders = [NSMutableDictionary dictionary];
     [mutableHeaders setValue:[NSString stringWithFormat:@"form-data; name=\"%@\"; filename=\"%@\"", name, fileName] forKey:@"Content-Disposition"];
     [mutableHeaders setValue:mimeType forKey:@"Content-Type"];
@@ -787,7 +802,10 @@ static inline NSString * AFMultipartFormFinalBoundary() {
     [self appendPartWithHeaders:mutableHeaders body:data];
 }
 
-- (BOOL)appendPartWithFileURL:(NSURL *)fileURL name:(NSString *)name error:(NSError **)error {
+- (BOOL)appendPartWithFileURL:(NSURL *)fileURL 
+                         name:(NSString *)name 
+                        error:(NSError **)error 
+{
     if (![fileURL isFileURL]) {
         NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
         [userInfo setValue:fileURL forKey:NSURLErrorFailingURLErrorKey];
@@ -819,6 +837,10 @@ static inline NSString * AFMultipartFormFinalBoundary() {
 }
 
 - (void)appendData:(NSData *)data {
+    if ([data length] == 0) {
+        return;
+    }
+
     if ([self.outputStream hasSpaceAvailable]) {
         const uint8_t *dataBuffer = (uint8_t *) [data bytes];
         [self.outputStream write:&dataBuffer[0] maxLength:[data length]];
