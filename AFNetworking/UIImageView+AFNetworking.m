@@ -101,9 +101,10 @@ static char kAFImageRequestOperationObjectKey;
    imageProcessingBlock:(UIImage *(^)(UIImage *image))imageProcessingBlock
               cacheName:(NSString *)cacheNameOrNil
 {
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:30.0];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setHTTPShouldHandleCookies:NO];
     [request setHTTPShouldUsePipelining:YES];
+    [request addValue:@"image/*" forHTTPHeaderField:@"Accept"];
     
     [self setImageWithURLRequest:request placeholderImage:placeholderImage imageProcessingBlock:imageProcessingBlock cacheName:cacheNameOrNil success:nil failure:nil];
 }
