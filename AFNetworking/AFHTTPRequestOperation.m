@@ -127,8 +127,9 @@ static NSString * AFStringFromIndexSet(NSIndexSet *indexSet) {
 - (NSError *)error {
     if (self.response && !self.HTTPError) {
         if (![self hasAcceptableStatusCode]) {
+            NSUInteger statusCode = ([self.response isKindOfClass:[NSHTTPURLResponse class]]) ? (NSUInteger)[self.response statusCode] : 200;
             NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
-            [userInfo setValue:[NSString stringWithFormat:NSLocalizedString(@"Expected status code in (%@), got %d", nil), AFStringFromIndexSet([[self class] acceptableStatusCodes]), [self.response statusCode]] forKey:NSLocalizedDescriptionKey];
+    		[userInfo setValue:[NSString stringWithFormat:NSLocalizedString(@"Expected status code in (%@), got %d", nil), AFStringFromIndexSet([[self class] acceptableStatusCodes]), statusCode] forKey:NSLocalizedDescriptionKey];
             [userInfo setValue:self.responseString forKey:NSLocalizedRecoverySuggestionErrorKey];
             [userInfo setValue:[self.request URL] forKey:NSURLErrorFailingURLErrorKey];
             
@@ -169,7 +170,8 @@ static NSString * AFStringFromIndexSet(NSIndexSet *indexSet) {
 }
 
 - (BOOL)hasAcceptableStatusCode {
-    return ![[self class] acceptableStatusCodes] || [[[self class] acceptableStatusCodes] containsIndex:(NSUInteger)[self.response statusCode]];
+    NSUInteger statusCode = ([self.response isKindOfClass:[NSHTTPURLResponse class]]) ? (NSUInteger)[self.response statusCode] : 200;
+    return ![[self class] acceptableStatusCodes] || [[[self class] acceptableStatusCodes] containsIndex:statusCode];
 }
 
 - (BOOL)hasAcceptableContentType {
@@ -273,10 +275,21 @@ didReceiveResponse:(NSURLResponse *)response
 {
     self.response = (NSHTTPURLResponse *)response;
     
-    // 206 = Partial Content.
+    // Set Content-Range header if status code of response is 206 (Partial Content)
+    // See http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html#sec10.2.7
     long long totalContentLength = self.response.expectedContentLength;
     long long fileOffset = 0;
-    if ([self.response statusCode] != 206) {
+    NSUInteger statusCode = ([self.response isKindOfClass:[NSHTTPURLResponse class]]) ? (NSUInteger)[self.response statusCode] : 200;
+    if (statusCode == 206) {
+        NSString *contentRange = [self.response.allHeaderFields valueForKey:@"Content-Range"];
+        if ([contentRange hasPrefix:@"bytes"]) {
+            NSArray *byteRanges = [contentRange componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" -/"]];
+            if ([byteRanges count] == 4) {
+                fileOffset = [[byteRanges objectAtIndex:1] longLongValue];
+                totalContentLength = [[byteRanges objectAtIndex:2] longLongValue] ?: -1; // if this is "*", it's converted to 0, but -1 is default.
+            }
+        }
+    } else {
         if ([self.outputStream propertyForKey:NSStreamFileCurrentOffsetKey]) {
             [self.outputStream setProperty:[NSNumber numberWithInteger:0] forKey:NSStreamFileCurrentOffsetKey];
         } else {
@@ -284,19 +297,11 @@ didReceiveResponse:(NSURLResponse *)response
                 self.outputStream = [NSOutputStream outputStreamToMemory];
             }
         }
-    }else {
-        NSString *contentRange = [self.response.allHeaderFields valueForKey:@"Content-Range"];
-        if ([contentRange hasPrefix:@"bytes"]) {
-            NSArray *bytes = [contentRange componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@" -/"]];
-            if ([bytes count] == 4) {
-                fileOffset = [[bytes objectAtIndex:1] longLongValue];
-                totalContentLength = [[bytes objectAtIndex:2] longLongValue] ?: -1; // if this is *, it's converted to 0, but -1 is default.
-            }
-        }
-
     }
+    
     self.offsetContentLength = MAX(fileOffset, 0);
     self.totalContentLength = totalContentLength;
+    
     [self.outputStream open];
 }
 
