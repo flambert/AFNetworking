@@ -23,23 +23,6 @@
 #import <Foundation/Foundation.h>
 
 /**
- Indicates an error occured in AFNetworking.
- 
- @discussion Error codes for AFNetworkingErrorDomain correspond to codes in NSURLErrorDomain.
- */
-extern NSString * const AFNetworkingErrorDomain;
-
-/**
- Posted when an operation begins executing.
- */
-extern NSString * const AFNetworkingOperationDidStartNotification;
-
-/**
- Posted when an operation finishes.
- */
-extern NSString * const AFNetworkingOperationDidFinishNotification;
-
-/**
  `AFURLConnectionOperation` is an `NSOperation` that implements NSURLConnection delegate methods.
  
  ## Subclassing Notes
@@ -61,7 +44,7 @@ extern NSString * const AFNetworkingOperationDidFinishNotification;
  - `connection:canAuthenticateAgainstProtectionSpace:`
  - `connection:didReceiveAuthenticationChallenge:`
  
- If any of these methods are overriden in a subclass, they _must_ call the `super` implementation first.
+ If any of these methods are overridden in a subclass, they _must_ call the `super` implementation first.
   
  ## Class Constructors
  
@@ -71,7 +54,7 @@ extern NSString * const AFNetworkingOperationDidFinishNotification;
  
  The built-in `completionBlock` provided by `NSOperation` allows for custom behavior to be executed after the request finishes. It is a common pattern for class constructors in subclasses to take callback block parameters, and execute them conditionally in the body of its `completionBlock`. Make sure to handle cancelled operations appropriately when setting a `completionBlock` (e.g. returning early before parsing response data). See the implementation of any of the `AFHTTPRequestOperation` subclasses for an example of this.
  
- @warning Subclasses are strongly discouraged from overriding `setCompletionBlock:`, as `AFURLConnectionOperation`'s implementation includes a workaround to mitigate retain cycles, and what Apple rather ominously refers to as "The Deallocation Problem" (See http://developer.apple.com/library/ios/technotes/tn2109/_index.html#//apple_ref/doc/uid/DTS40010274-CH1-SUBSECTION11)
+ Subclasses are strongly discouraged from overriding `setCompletionBlock:`, as `AFURLConnectionOperation`'s implementation includes a workaround to mitigate retain cycles, and what Apple rather ominously refers to as ["The Deallocation Problem"](http://developer.apple.com/library/ios/#technotes/tn2109/).
  
  ## NSCoding & NSCopying Conformance
  
@@ -86,7 +69,7 @@ extern NSString * const AFNetworkingOperationDidFinishNotification;
  
  - `-copy` and `-copyWithZone:` return a new operation with the `NSURLRequest` of the original. So rather than an exact copy of the operation at that particular instant, the copying mechanism returns a completely new instance, which can be useful for retrying operations.
  - A copy of an operation will not include the `outputStream` of the original.
- - Operation copies do not include `completionBlock`. `completionBlock` often strongly captures a reference to `self`, which, perhaps surprisingly, would otherwise point to the _original_ operation when copied. 
+ - Operation copies do not include `completionBlock`. `completionBlock` often strongly captures a reference to `self`, which, perhaps surprisingly, would otherwise point to the _original_ operation when copied.
  */
 @interface AFURLConnectionOperation : NSOperation <NSCoding, NSCopying>
 
@@ -114,7 +97,7 @@ extern NSString * const AFNetworkingOperationDidFinishNotification;
 @property (readonly, nonatomic, retain) NSURLResponse *response;
 
 /**
- The error, if any, that occured in the lifecycle of the request.
+ The error, if any, that occurred in the lifecycle of the request.
  */
 @property (readonly, nonatomic, retain) NSError *error;
 
@@ -211,21 +194,15 @@ extern NSString * const AFNetworkingOperationDidFinishNotification;
  Sets a callback to be called when an undetermined number of bytes have been uploaded to the server.
  
  @param block A block object to be called when an undetermined number of bytes have been uploaded to the server. This block has no return value and takes three arguments: the number of bytes written since the last time the upload progress block was called, the total bytes written, and the total bytes expected to be written during the request, as initially determined by the length of the HTTP body. This block may be called multiple times, and will execute on the main thread.
- 
- @discussion This block is called on the main thread.
- 
- @see setDownloadProgressBlock
  */
-- (void)setUploadProgressBlock:(void (^)(NSInteger bytesWritten, long long totalBytesWritten, long long totalBytesExpectedToWrite))block;
+- (void)setUploadProgressBlock:(void (^)(NSUInteger bytesWritten, long long totalBytesWritten, long long totalBytesExpectedToWrite))block;
 
 /**
  Sets a callback to be called when an undetermined number of bytes have been downloaded from the server.
  
  @param block A block object to be called when an undetermined number of bytes have been downloaded from the server. This block has no return value and takes three arguments: the number of bytes read since the last time the download progress block was called, the total bytes read, and the total bytes expected to be read during the request, as initially determined by the expected content size of the `NSHTTPURLResponse` object. This block may be called multiple times, and will execute on the main thread.
-  
- @see setUploadProgressBlock
  */
-- (void)setDownloadProgressBlock:(void (^)(NSInteger bytesRead, long long totalBytesRead, long long totalBytesExpectedToRead))block;
+- (void)setDownloadProgressBlock:(void (^)(NSUInteger bytesRead, long long totalBytesRead, long long totalBytesExpectedToRead))block;
 
 ///-------------------------------------------------
 /// @name Setting NSURLConnection Delegate Callbacks
@@ -299,3 +276,52 @@ didReceiveResponse:(NSURLResponse *)response;
                   willCacheResponse:(NSCachedURLResponse *)cachedResponse;
 
 @end
+
+///----------------
+/// @name Constants
+///----------------
+
+/**
+ ## User info dictionary keys
+ 
+ These keys may exist in the user info dictionary, in addition to those defined for NSError.
+ 
+ - `NSString * const AFNetworkingOperationFailingURLRequestErrorKey`
+ - `NSString * const AFNetworkingOperationFailingURLResponseErrorKey`
+ 
+ ### Constants
+ 
+ `AFNetworkingOperationFailingURLRequestErrorKey`
+ The corresponding value is an `NSURLRequest` containing the request of the operation associated with an error. This key is only present in the `AFNetworkingErrorDomain`.
+ 
+ `AFNetworkingOperationFailingURLResponseErrorKey`
+ The corresponding value is an `NSURLResponse` containing the response of the operation associated with an error. This key is only present in the `AFNetworkingErrorDomain`.
+ 
+ ## Error Domains
+ 
+ The following error domain is predefined.
+ 
+ - `NSString * const AFNetworkingErrorDomain`
+ 
+ ### Constants
+ 
+ `AFNetworkingErrorDomain`
+ AFNetworking errors. Error codes for `AFNetworkingErrorDomain` correspond to codes in `NSURLErrorDomain`.
+ */
+extern NSString * const AFNetworkingErrorDomain;
+extern NSString * const AFNetworkingOperationFailingURLRequestErrorKey;
+extern NSString * const AFNetworkingOperationFailingURLResponseErrorKey;
+
+///--------------------
+/// @name Notifications
+///--------------------
+
+/**
+ Posted when an operation begins executing.
+ */
+extern NSString * const AFNetworkingOperationDidStartNotification;
+
+/**
+ Posted when an operation finishes.
+ */
+extern NSString * const AFNetworkingOperationDidFinishNotification;
