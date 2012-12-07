@@ -22,8 +22,10 @@
 
 #import <Foundation/Foundation.h>
 
+#import <Availability.h>
+
 /**
- `AFURLConnectionOperation` is an `NSOperation` that implements NSURLConnection delegate methods.
+ `AFURLConnectionOperation` is a subclass of `NSOperation` that implements `NSURLConnection` delegate methods.
  
  ## Subclassing Notes
  
@@ -48,11 +50,11 @@
   
  ## Class Constructors
  
- Class constructors, or methods that return an unowned (zero retain count) instance, are the preferred way for subclasses to encapsulate any particular logic for handling the setup or parsing of response data. For instance, `AFJSONRequestOperation` provides `JSONRequestOperationWithRequest:success:failure:`, which takes block arguments, whose parameter on for a successful request is the JSON object initialized from the `response data`.
+ Class constructors, or methods that return an unowned instance, are the preferred way for subclasses to encapsulate any particular logic for handling the setup or parsing of response data. For instance, `AFJSONRequestOperation` provides `JSONRequestOperationWithRequest:success:failure:`, which takes block arguments, whose parameter on for a successful request is the JSON object initialized from the `response data`.
  
  ## Callbacks and Completion Blocks
  
- The built-in `completionBlock` provided by `NSOperation` allows for custom behavior to be executed after the request finishes. It is a common pattern for class constructors in subclasses to take callback block parameters, and execute them conditionally in the body of its `completionBlock`. Make sure to handle cancelled operations appropriately when setting a `completionBlock` (e.g. returning early before parsing response data). See the implementation of any of the `AFHTTPRequestOperation` subclasses for an example of this.
+ The built-in `completionBlock` provided by `NSOperation` allows for custom behavior to be executed after the request finishes. It is a common pattern for class constructors in subclasses to take callback block parameters, and execute them conditionally in the body of its `completionBlock`. Make sure to handle cancelled operations appropriately when setting a `completionBlock` (i.e. returning early before parsing response data). See the implementation of any of the `AFHTTPRequestOperation` subclasses for an example of this.
  
  Subclasses are strongly discouraged from overriding `setCompletionBlock:`, as `AFURLConnectionOperation`'s implementation includes a workaround to mitigate retain cycles, and what Apple rather ominously refers to as ["The Deallocation Problem"](http://developer.apple.com/library/ios/#technotes/tn2109/).
  
@@ -69,9 +71,9 @@
  
  - `-copy` and `-copyWithZone:` return a new operation with the `NSURLRequest` of the original. So rather than an exact copy of the operation at that particular instant, the copying mechanism returns a completely new instance, which can be useful for retrying operations.
  - A copy of an operation will not include the `outputStream` of the original.
- - Operation copies do not include `completionBlock`. `completionBlock` often strongly captures a reference to `self`, which, perhaps surprisingly, would otherwise point to the _original_ operation when copied.
+ - Operation copies do not include `completionBlock`. `completionBlock` often strongly captures a reference to `self`, which would otherwise have the unintuitive side-effect of pointing to the _original_ operation when copied.
  */
-@interface AFURLConnectionOperation : NSOperation <NSCoding, NSCopying>
+@interface AFURLConnectionOperation : NSOperation <NSURLConnectionDelegate, NSURLConnectionDataDelegate, NSCoding, NSCopying>
 
 ///-------------------------------
 /// @name Accessing Run Loop Modes
@@ -80,7 +82,7 @@
 /**
  The run loop modes in which the operation will run on the network thread. By default, this is a single-member set containing `NSRunLoopCommonModes`.
  */
-@property (nonatomic, retain) NSSet *runLoopModes;
+@property (nonatomic, strong) NSSet *runLoopModes;
 
 ///-----------------------------------------
 /// @name Getting URL Connection Information
@@ -89,17 +91,17 @@
 /**
  The request used by the operation's connection.
  */
-@property (readonly, nonatomic, retain) NSURLRequest *request;
+@property (readonly, nonatomic, strong) NSURLRequest *request;
 
 /**
  The last response received by the operation's connection.
  */
-@property (readonly, nonatomic, retain) NSURLResponse *response;
+@property (readonly, nonatomic, strong) NSURLResponse *response;
 
 /**
  The error, if any, that occurred in the lifecycle of the request.
  */
-@property (readonly, nonatomic, retain) NSError *error;
+@property (readonly, nonatomic, strong) NSError *error;
 
 ///----------------------------
 /// @name Getting Response Data
@@ -108,14 +110,19 @@
 /**
  The data received during the request. 
  */
-@property (readonly, nonatomic, retain) NSData *responseData;
+@property (readonly, nonatomic, strong) NSData *responseData;
 
 /**
  The string representation of the response data.
- 
- @discussion This method uses the string encoding of the response, or if UTF-8 if not specified, to construct a string from the response data.
  */
 @property (readonly, nonatomic, copy) NSString *responseString;
+
+/**
+ The string encoding of the response.
+ 
+ @discussion If the response does not specify a valid string encoding, `responseStringEncoding` will return `NSUTF8StringEncoding`. 
+ */
+@property (readonly, nonatomic, assign) NSStringEncoding responseStringEncoding;
 
 ///------------------------
 /// @name Accessing Streams
@@ -126,14 +133,14 @@
  
  @discussion This property acts as a proxy to the `HTTPBodyStream` property of `request`.
  */
-@property (nonatomic, retain) NSInputStream *inputStream;
+@property (nonatomic, strong) NSInputStream *inputStream;
 
 /**
  The output stream that is used to write data received until the request is finished.
  
  @discussion By default, data is accumulated into a buffer that is stored into `responseData` upon completion of the request. When `outputStream` is set, the data will not be accumulated into an internal buffer, and as a result, the `responseData` property of the completed request will be `nil`. The output stream will be scheduled in the network thread runloop upon being set.
  */
-@property (nonatomic, retain) NSOutputStream *outputStream;
+@property (nonatomic, strong) NSOutputStream *outputStream;
 
 ///------------------------------------------------------
 /// @name Initializing an AFURLConnectionOperation Object
@@ -182,7 +189,7 @@
  
  @param handler A handler to be called shortly before the application’s remaining background time reaches 0. The handler is wrapped in a block that cancels the operation, and cleans up and marks the end of execution, unlike the `handler` parameter in `UIApplication -beginBackgroundTaskWithExpirationHandler:`, which expects this to be done in the handler itself. The handler is called synchronously on the main thread, thus blocking the application’s suspension momentarily while the application is notified. 
  */
-#if __IPHONE_OS_VERSION_MIN_REQUIRED
+#if defined(__IPHONE_OS_VERSION_MIN_REQUIRED)
 - (void)setShouldExecuteAsBackgroundTaskWithExpirationHandler:(void (^)(void))handler;
 #endif
 
@@ -240,40 +247,6 @@
  @param block A block object to be executed to determine what response a connection will cache, if any. The block returns an `NSCachedURLResponse` object, the cached response to store in memory or `nil` to prevent the response from being cached, and takes two arguments: the URL connection object, and the cached response provided for the request.
  */
 - (void)setCacheResponseBlock:(NSCachedURLResponse * (^)(NSURLConnection *connection, NSCachedURLResponse *cachedResponse))block;
-
-///---------------------------------------
-/// @name NSURLConnection Delegate Methods
-/// @discussion NSURLConnection delegate methods were part of an informal protocol until iOS 5 & Mac OS 10.7, so the method signatures are declared here in order to allow subclasses to override these methods and call back to the super implementation.
-///---------------------------------------
-
-- (BOOL)connection:(NSURLConnection *)connection
-canAuthenticateAgainstProtectionSpace:(NSURLProtectionSpace *)protectionSpace;
-
-- (void)connection:(NSURLConnection *)connection
-didReceiveAuthenticationChallenge:(NSURLAuthenticationChallenge *)challenge;
-
-- (NSURLRequest *)connection:(NSURLConnection *)connection
-             willSendRequest:(NSURLRequest *)request
-            redirectResponse:(NSURLResponse *)redirectResponse;
-
-- (void)connection:(NSURLConnection *)connection
-   didSendBodyData:(NSInteger)bytesWritten
- totalBytesWritten:(NSInteger)totalBytesWritten
-totalBytesExpectedToWrite:(NSInteger)totalBytesExpectedToWrite;
-
-- (void)connection:(NSURLConnection *)connection
-didReceiveResponse:(NSURLResponse *)response;
-
-- (void)connection:(NSURLConnection *)connection
-    didReceiveData:(NSData *)data;
-
-- (void)connectionDidFinishLoading:(NSURLConnection *)connection;
-
-- (void)connection:(NSURLConnection *)connection
-  didFailWithError:(NSError *)error;
-
-- (NSCachedURLResponse *)connection:(NSURLConnection *)connection
-                  willCacheResponse:(NSCachedURLResponse *)cachedResponse;
 
 @end
 

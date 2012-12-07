@@ -1,4 +1,4 @@
-// Tweet.m
+// Post.m
 //
 // Copyright (c) 2012 Mattt Thompson (http://mattt.me/)
 // 
@@ -20,19 +20,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#import "Tweet.h"
+#import "Post.h"
 #import "User.h"
 
-#import "AFTwitterAPIClient.h"
+#import "AFAppDotNetAPIClient.h"
 
-@implementation Tweet {
-@private
-    NSUInteger _tweetID;
-    __strong NSString *_text;
-    __strong User *_user;
-}
-
-@synthesize tweetID = _tweetID;
+@implementation Post
+@synthesize postID = _postID;
 @synthesize text = _text;
 @synthesize user = _user;
 
@@ -42,7 +36,7 @@
         return nil;
     }
     
-    _tweetID = [[attributes valueForKeyPath:@"id"] integerValue];
+    _postID = [[attributes valueForKeyPath:@"id"] integerValue];
     _text = [attributes valueForKeyPath:@"text"];
     
     _user = [[User alloc] initWithAttributes:[attributes valueForKeyPath:@"user"]];
@@ -52,16 +46,17 @@
 
 #pragma mark -
 
-+ (void)publicTimelineTweetsWithBlock:(void (^)(NSArray *tweets, NSError *error))block {
-    [[AFTwitterAPIClient sharedClient] getPath:@"statuses/public_timeline.json" parameters:[NSDictionary dictionaryWithObject:@"false" forKey:@"include_entities"] success:^(AFHTTPRequestOperation *operation, id JSON) {
-        NSMutableArray *mutableTweets = [NSMutableArray arrayWithCapacity:[JSON count]];
-        for (NSDictionary *attributes in JSON) {
-            Tweet *tweet = [[Tweet alloc] initWithAttributes:attributes];
-            [mutableTweets addObject:tweet];
++ (void)globalTimelinePostsWithBlock:(void (^)(NSArray *posts, NSError *error))block {
+    [[AFAppDotNetAPIClient sharedClient] getPath:@"stream/0/posts/stream/global" parameters:nil success:^(AFHTTPRequestOperation *operation, id JSON) {
+        NSArray *postsFromResponse = [JSON valueForKeyPath:@"data"];
+        NSMutableArray *mutablePosts = [NSMutableArray arrayWithCapacity:[postsFromResponse count]];
+        for (NSDictionary *attributes in postsFromResponse) {
+            Post *post = [[Post alloc] initWithAttributes:attributes];
+            [mutablePosts addObject:post];
         }
         
         if (block) {
-            block([NSArray arrayWithArray:mutableTweets], nil);
+            block([NSArray arrayWithArray:mutablePosts], nil);
         }
     } failure:^(AFHTTPRequestOperation *operation, NSError *error) {
         if (block) {
