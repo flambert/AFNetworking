@@ -45,6 +45,8 @@
  - `connection:willCacheResponse:`
  - `connection:canAuthenticateAgainstProtectionSpace:`
  - `connection:didReceiveAuthenticationChallenge:`
+ - `connectionShouldUseCredentialStorage:`
+ - `connection:needNewBodyStream:`
  
  If any of these methods are overridden in a subclass, they _must_ call the `super` implementation first.
   
@@ -124,6 +126,25 @@
  */
 @property (readonly, nonatomic, assign) NSStringEncoding responseStringEncoding;
 
+
+///-------------------------------
+/// @name Managing URL Credentials
+///-------------------------------
+
+/**
+ Whether the URL connection should consult the credential storage for authenticating the connection. `YES` by default.
+ 
+ @discussion This is the value that is returned in the `NSURLConnectionDelegate` method `-connectionShouldUseCredentialStorage:`.
+ */
+@property (nonatomic, assign) BOOL shouldUseCredentialStorage;
+
+/**
+ The credential used for authentication challenges in `-connection:didReceiveAuthenticationChallenge:`.
+ 
+ @discussion This will be overridden by any shared credentials that exist for the username or password of the request URL, if present.
+ */
+@property (nonatomic, strong) NSURLCredential *credential;
+
 ///------------------------
 /// @name Accessing Streams
 ///------------------------
@@ -141,6 +162,15 @@
  @discussion By default, data is accumulated into a buffer that is stored into `responseData` upon completion of the request. When `outputStream` is set, the data will not be accumulated into an internal buffer, and as a result, the `responseData` property of the completed request will be `nil`. The output stream will be scheduled in the network thread runloop upon being set.
  */
 @property (nonatomic, strong) NSOutputStream *outputStream;
+
+///---------------------------------------------
+/// @name Managing Request Operation Information
+///---------------------------------------------
+
+/**
+ The user info dictionary for the receiver.
+ */
+@property (nonatomic, strong) NSDictionary *userInfo;
 
 ///------------------------------------------------------
 /// @name Initializing an AFURLConnectionOperation Object
